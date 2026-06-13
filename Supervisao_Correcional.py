@@ -43,6 +43,26 @@ UNIDADES_SERVICO = [
     "6ª DPJM", "7ª DPJM", "8ª DPJM", "CGPM",
 ]
 
+POSTOS_GRADUACOES = [
+    "",
+    "CEL",
+    "TCEL",
+    "MAJ",
+    "CAP",
+    "1º TEN",
+    "2ª TEN",
+    "ASP",
+    "CADETE",
+    "SUBTEN",
+    "1º SGT",
+    "2º SGT",
+    "3º SGT",
+    "CB",
+    "SD",
+    "ALUNO CFSD",
+    "ALUNO CURSO CORRECIONAL",
+]
+
 COLUNAS_CADASTRO = [
     "ID", "ORDEM", "POSTO_GRADUACAO", "RG", "NOME_DE_ESCALA",
     "SENHA", "AUTORIZADO", "ATUALIZADO_EM", "VERSAO",
@@ -348,6 +368,21 @@ def indice_opcao(opcoes: list, valor: Any) -> int:
     if valor in opcoes:
         return opcoes.index(valor)
     return 0
+
+
+def montar_opcoes_posto_graduacao(valor_atual: Any = "") -> list:
+    """
+    Monta a lista do campo Posto/Graduação.
+    Se houver valor antigo já salvo fora da lista, ele é mantido temporariamente
+    para permitir visualizar/editar o cadastro sem apagar informação existente.
+    """
+    opcoes = POSTOS_GRADUACOES.copy()
+    valor_atual = normalizar_texto(valor_atual).upper()
+
+    if valor_atual and valor_atual not in opcoes:
+        opcoes.append(valor_atual)
+
+    return opcoes
 
 
 # ==========================================================
@@ -2138,7 +2173,14 @@ def render_cadastro():
         st.markdown("### 📄 Dados do Cadastro")
         col_a, col_b = st.columns(2)
         with col_a:
-            posto_graduacao = st.text_input("Posto/Graduação", value=normalizar_texto(registro_atual.get("POSTO_GRADUACAO", "")), disabled=campos_desabilitados)
+            posto_atual = normalizar_texto(registro_atual.get("POSTO_GRADUACAO", "")).upper()
+            opcoes_posto = montar_opcoes_posto_graduacao(posto_atual)
+            posto_graduacao = st.selectbox(
+                "Posto/Graduação",
+                options=opcoes_posto,
+                index=indice_opcao(opcoes_posto, posto_atual),
+                disabled=campos_desabilitados,
+            )
             rg = st.text_input("RG", value=normalizar_texto(registro_atual.get("RG", "")), disabled=campos_desabilitados)
         with col_b:
             nome_escala = st.text_input("Nome de Escala", value=normalizar_texto(registro_atual.get("NOME_DE_ESCALA", "")), disabled=campos_desabilitados)
