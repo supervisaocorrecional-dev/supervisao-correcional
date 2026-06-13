@@ -1,0 +1,8 @@
+.venv/
+.streamlit/
+__pycache__/
+*.pyc
+service_account.json
+service_account.json.json
+service_account
+*.txt
