@@ -2573,7 +2573,6 @@ def render_assuncao_servico():
         st.session_state.tipo_msg_servico = "success"
         st.rerun()
 
-    st.markdown("<div class='service-title'>SUPERVISÃO CORRECIONAL</div>", unsafe_allow_html=True)
 
     if st.session_state.msg_servico:
         if st.session_state.tipo_msg_servico == "success":
