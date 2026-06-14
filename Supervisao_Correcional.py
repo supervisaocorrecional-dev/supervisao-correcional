@@ -2477,6 +2477,13 @@ def render_assuncao_servico():
     if st.session_state.usuario_logado:
         st.session_state.assuncao_ativa = True
 
+    # Limpezas que alteram chaves de widgets precisam ocorrer ANTES de qualquer widget
+    # da Assunção ser instanciado. Isso evita StreamlitAPIException e impede que
+    # o Salvar se comporte como Cancelar após uma edição.
+    if st.session_state.get("limpar_visual_servico_apos_rerun", False):
+        st.session_state.limpar_visual_servico_apos_rerun = False
+        limpar_campos_servico_mantendo_registro_atual()
+
     # Quando uma data cadastrada é selecionada na listbox, o serviço correspondente
     # é carregado aqui, ANTES da criação dos widgets, evitando erro de alteração
     # de st.session_state depois que o campo já foi instanciado pelo Streamlit.
@@ -3054,12 +3061,19 @@ def render_assuncao_servico():
                 st.session_state.tipo_msg_servico = "error"
                 st.rerun()
 
-            carregar_servico_na_tela(resultado)
+            # NÃO chame carregar_servico_na_tela() aqui. Neste ponto os widgets
+            # da Assunção já foram instanciados; alterar chaves como serv_unidade
+            # depois disso gera erro no Streamlit Cloud e impede o salvamento.
+            # O registro já foi salvo no Sheets por adicionar_servico(); basta
+            # guardar o resultado em memória e abrir o menu das áreas.
+            st.session_state.servico_atual = resultado
+            st.session_state.modo_servico = "visualizar"
             st.session_state.assuncao_ativa = True
             ativar_menu_areas_do_servico(resultado)
-            st.session_state.area_menu_msg = "✅ Serviço salvo com sucesso. As abas das áreas foram exibidas no menu."
+            limpar_cache_servicos()
+            st.session_state.area_menu_msg = "✅ Serviço salvo com sucesso no Google Sheets. As abas das áreas foram exibidas no menu."
             st.session_state.area_menu_tipo_msg = "success"
-            st.session_state.msg_servico = "✅ Serviço salvo com sucesso. As abas das áreas foram exibidas no menu."
+            st.session_state.msg_servico = "✅ Serviço salvo com sucesso no Google Sheets. As abas das áreas foram exibidas no menu."
             st.session_state.tipo_msg_servico = "success"
             st.rerun()
 
@@ -3078,10 +3092,13 @@ def render_assuncao_servico():
                 st.rerun()
 
             st.session_state.servico_atual = resultado
+            st.session_state.modo_servico = "visualizar"
             st.session_state.assuncao_ativa = True
             desativar_menu_areas()
-            limpar_campos_servico_mantendo_registro_atual()
             limpar_cache_servicos()
+            # A limpeza visual mexe em chaves de widgets como serv_num_areas.
+            # Por isso ela é agendada para o próximo rerun, antes da criação dos widgets.
+            st.session_state.limpar_visual_servico_apos_rerun = True
             st.session_state.msg_servico = "✅ Serviço atualizado com sucesso no Google Sheets. A tela foi limpa; selecione Unidade e Data para visualizar novamente."
             st.session_state.tipo_msg_servico = "success"
             st.rerun()
