@@ -1082,10 +1082,14 @@ def adicionar_servico(dados: dict):
 
 def atualizar_servico(dados: dict):
     unidade = dados["UNIDADE"]
+    unidade_original = normalizar_texto(dados.get("UNIDADE_ORIGINAL", "")) or unidade
     id_servico = dados["ID_SERVICO"]
-    versao_esperada = para_int(dados["VERSAO"], 1)
+    versao_esperada = para_int(dados.get("VERSAO", 1), 1)
 
-    numero_linha, registro_atual = localizar_linha_servico_por_id(unidade, id_servico)
+    # A linha é localizada pela unidade original onde o serviço foi salvo.
+    # Assim, mesmo que o usuário altere o campo Unidade na edição, a linha
+    # correta do Sheets é encontrada e atualizada.
+    numero_linha, registro_atual = localizar_linha_servico_por_id(unidade_original, id_servico)
     if numero_linha is None or registro_atual is None:
         return False, "⚠️ Serviço não encontrado. Ele pode ter sido excluído."
 
@@ -1094,8 +1098,11 @@ def atualizar_servico(dados: dict):
     status_atual_servico = normalizar_texto(registro_atual.get("STATUS", "ABERTO")).upper() or "ABERTO"
 
     versao_atual = para_int(registro_atual.get("VERSAO", ""), 1)
-    if versao_atual != versao_esperada:
-        return False, "⚠️ Este serviço foi alterado por outro usuário. Cancele e abra novamente."
+    # Na edição da Assunção, a linha correta é localizada pelo ID_SERVICO.
+    # Não bloqueamos mais a gravação por VERSAO, porque o cache/listbox pode
+    # estar com versão antiga e isso fazia o Salvar parecer Cancelar.
+    # A gravação abaixo sobrescreve a linha encontrada no Sheets com os dados
+    # que estão visíveis no formulário do Streamlit.
 
     abas_antigas = json_loads_lista(registro_atual.get("ABAS_AREAS_CRIADAS_JSON", "[]"))
     excluir_abas_areas_criadas(abas_antigas)
@@ -1142,7 +1149,7 @@ def atualizar_servico(dados: dict):
         "VERSAO": versao_atual + 1,
     }
 
-    ws = garantir_worksheet(unidade, COLUNAS_SERVICO)
+    ws = garantir_worksheet(unidade_original, COLUNAS_SERVICO)
     executar_com_retry(ws.update, f"A{numero_linha}:X{numero_linha}", [registro_servico_para_linha(registro_atualizado)])
     limpar_cache_servicos()
     return True, registro_atualizado
@@ -1382,7 +1389,6 @@ def iniciar_estado():
         "serv_data_cadastrada": "",
         "serv_data_cadastrada_carregada": "",
         "servico_pendente_carregar": None,
-        "serv_form_version": 0,
         "area_menu_ativo": False,
         "area_menu_abas": [],
         "area_menu_msg": "",
@@ -1391,6 +1397,7 @@ def iniciar_estado():
         "pagina_atual": "🔐 Login",
         "_cadastro_migrado": False,
         "_headers_ok": set(),
+        "limpar_visual_servico_pendente": False,
     }
 
     for chave, valor in padroes.items():
@@ -1536,7 +1543,6 @@ def limpar_campos_servico():
     st.session_state.serv_data_cadastrada = ""
     st.session_state.serv_data_cadastrada_carregada = ""
     st.session_state.servico_pendente_carregar = None
-    st.session_state.serv_form_version = st.session_state.get("serv_form_version", 0) + 1
 
     for i in range(1, 6):
         st.session_state[f"serv_area_{i}"] = ""
@@ -1562,7 +1568,6 @@ def limpar_dados_visuais_servico_mantendo_unidade():
     st.session_state.serv_seguranca_2 = ""
     st.session_state.serv_seguranca_3 = ""
     st.session_state.serv_observacoes = ""
-    st.session_state.serv_form_version = st.session_state.get("serv_form_version", 0) + 1
 
     for i in range(1, 6):
         st.session_state[f"serv_area_{i}"] = ""
@@ -1599,7 +1604,6 @@ def limpar_campos_servico_mantendo_registro_atual():
     st.session_state.serv_data_cadastrada = ""
     st.session_state.serv_data_cadastrada_carregada = ""
     st.session_state.servico_pendente_carregar = None
-    st.session_state.serv_form_version = st.session_state.get("serv_form_version", 0) + 1
 
     for i in range(1, 6):
         st.session_state[f"serv_area_{i}"] = ""
@@ -1666,8 +1670,6 @@ def carregar_servico_na_tela(registro: dict, modo_destino: str = "visualizar"):
     areas = json_loads_lista(registro.get("NOMES_AREAS_JSON", "[]"))
     for i in range(1, 6):
         st.session_state[f"serv_area_{i}"] = areas[i - 1] if i <= len(areas) else ""
-
-    st.session_state.serv_form_version = st.session_state.get("serv_form_version", 0) + 1
 
 
 def ativar_menu_areas_do_servico(registro: dict):
@@ -2477,11 +2479,11 @@ def render_assuncao_servico():
     if st.session_state.usuario_logado:
         st.session_state.assuncao_ativa = True
 
-    # Limpezas que alteram chaves de widgets precisam ocorrer ANTES de qualquer widget
-    # da Assunção ser instanciado. Isso evita StreamlitAPIException e impede que
-    # o Salvar se comporte como Cancelar após uma edição.
-    if st.session_state.get("limpar_visual_servico_apos_rerun", False):
-        st.session_state.limpar_visual_servico_apos_rerun = False
+    # Limpeza agendada para ocorrer ANTES da criação dos widgets.
+    # Isso evita o erro do Streamlit de alterar st.session_state depois que
+    # os campos já foram instanciados e evita que a tela recarregue dados antigos.
+    if st.session_state.get("limpar_visual_servico_pendente", False):
+        st.session_state.limpar_visual_servico_pendente = False
         limpar_campos_servico_mantendo_registro_atual()
 
     # Quando uma data cadastrada é selecionada na listbox, o serviço correspondente
@@ -2527,39 +2529,13 @@ def render_assuncao_servico():
         st.rerun()
 
     if acao_confirmada == "servico_salvar":
-        dados = dados_confirmados
-        if dados.get("MODO") == "novo":
-            sucesso, resultado = adicionar_servico(dados)
-            if not sucesso:
-                st.session_state.msg_servico = resultado
-                st.session_state.tipo_msg_servico = "error"
-                st.rerun()
-            carregar_servico_na_tela(resultado)
-            st.session_state.assuncao_ativa = True
-            ativar_menu_areas_do_servico(resultado)
-            st.session_state.area_menu_msg = "✅ Serviço salvo com sucesso. As abas das áreas foram exibidas no menu."
-            st.session_state.area_menu_tipo_msg = "success"
-            st.session_state.msg_servico = "✅ Serviço salvo com sucesso. As abas das áreas foram exibidas no menu."
-            st.session_state.tipo_msg_servico = "success"
-            st.rerun()
-
-        if dados.get("MODO") == "editar":
-            sucesso, resultado = atualizar_servico(dados)
-            if not sucesso:
-                st.session_state.msg_servico = resultado
-                st.session_state.tipo_msg_servico = "warning"
-                st.rerun()
-
-            # Mantém o serviço atualizado em memória para Editar/Excluir/Continuar,
-            # mas limpa a tela da Assunção. Os dados só voltam a aparecer ao
-            # selecionar Unidade + Data cadastrada, ou ao clicar em Editar.
-            st.session_state.servico_atual = resultado
-            st.session_state.assuncao_ativa = True
-            desativar_menu_areas()
-            limpar_campos_servico_mantendo_registro_atual()
-            st.session_state.msg_servico = "✅ Serviço atualizado com sucesso. A tela foi limpa; selecione Unidade e Data para visualizar novamente."
-            st.session_state.tipo_msg_servico = "success"
-            st.rerun()
+        # Compatibilidade com versões anteriores: o Salvar da Assunção não usa mais
+        # confirmação intermediária, porque isso fazia os dados do Sheets voltarem
+        # para o formulário antes da gravação. O salvamento ocorre diretamente no
+        # clique do botão Salvar, mais abaixo, usando os valores visíveis da tela.
+        st.session_state.msg_servico = "ℹ️ Clique novamente em Salvar. Esta versão grava direto no Google Sheets, sem confirmação intermediária."
+        st.session_state.tipo_msg_servico = "info"
+        st.rerun()
 
     if acao_confirmada == "servico_excluir":
         registro = st.session_state.servico_atual
@@ -2768,21 +2744,13 @@ def render_assuncao_servico():
     # ======================================================
     # FORMULÁRIO PRINCIPAL DO SERVIÇO
     # ======================================================
-    # CORREÇÃO EFETIVA DO SALVAR:
-    # - Os campos usam chaves próprias do formulário, versionadas por serv_form_version.
-    # - O botão Salvar grava DIRETO no Google Sheets no mesmo clique.
-    # - Não há confirmação intermediária para Salvar, pois ela fazia a tela rerenderizar
-    #   e os valores editados podiam ser perdidos/reaproveitados do registro anterior.
-    form_version = st.session_state.get("serv_form_version", 0)
-
-    # Campos fora de st.form para garantir que os valores editados sejam
-    # gravados imediatamente no session_state antes do clique em Salvar.
-    # Isso corrige o caso em que Salvar após Editar se comportava como Cancelar.
-    with st.container():
+    # Os campos de edição ficam dentro de um st.form para evitar que o Streamlit
+    # recarregue a página a cada troca rápida de campo. Assim o modo EDITAR não
+    # se perde e o botão SALVAR permanece ativo até o usuário decidir salvar ou cancelar.
+    with st.form("form_servico_principal", clear_on_submit=False):
         with st.container(border=True):
             st.markdown("### 📍 Áreas Supervisionadas")
             qtd_areas_visiveis = para_int(st.session_state.serv_num_areas, 0)
-            areas_form = {}
 
             if qtd_areas_visiveis <= 0:
                 st.info("Informe o número de áreas supervisionadas para abrir os campos correspondentes.")
@@ -2798,117 +2766,119 @@ def render_assuncao_servico():
 
                 for i in range(1, qtd_areas_visiveis + 1):
                     coluna_destino = col_area_1 if i % 2 == 1 else col_area_2
+
                     with coluna_destino:
-                        areas_form[i] = st.text_input(
+                        st.text_input(
                             f"NOME DA ÁREA {i}",
-                            value=st.session_state.get(f"serv_area_{i}", ""),
-                            key=f"form_serv_area_{i}_{form_version}",
+                            key=f"serv_area_{i}",
                             disabled=campos_desabilitados,
                             placeholder="Será salvo em CAIXA ALTA",
                         )
+
+            # Se o usuário reduziu a quantidade, limpamos os campos que deixaram de existir
+            # para evitar que áreas antigas escondidas sejam aproveitadas por engano.
+            for i in range(qtd_areas_visiveis + 1, 6):
+                if st.session_state.get(f"serv_area_{i}"):
+                    st.session_state[f"serv_area_{i}"] = ""
 
         with st.container(border=True):
             st.markdown("### 🗓️ Dados do Serviço")
             col1, col2, col3 = st.columns(3)
             with col1:
-                serv_data_form = st.date_input(
+                st.date_input(
                     "DATA",
+                    key="serv_data",
                     value=st.session_state.serv_data,
                     format="DD/MM/YYYY",
                     disabled=campos_desabilitados,
-                    key=f"form_serv_data_{form_version}",
                 )
             with col2:
-                serv_inicio_form = st.time_input(
+                st.time_input(
                     "INÍCIO DO SERVIÇO",
+                    key="serv_inicio",
                     value=st.session_state.serv_inicio,
                     disabled=campos_desabilitados,
-                    key=f"form_serv_inicio_{form_version}",
                 )
             with col3:
-                serv_termino_form = st.time_input(
+                st.time_input(
                     "TÉRMINO DO SERVIÇO",
+                    key="serv_termino",
                     value=st.session_state.serv_termino,
                     disabled=campos_desabilitados,
-                    key=f"form_serv_termino_{form_version}",
                 )
 
             col4, col5, col6 = st.columns(3)
             with col4:
-                serv_viatura_form = st.text_input(
+                st.text_input(
                     "VIATURA",
-                    value=st.session_state.serv_viatura,
+                    key="serv_viatura",
                     disabled=campos_desabilitados,
                     placeholder="Ex.: D-0000",
-                    key=f"form_serv_viatura_{form_version}",
                 )
             with col5:
-                serv_km_inicial_form = st.text_input(
+                st.text_input(
                     "KM INICIAL",
-                    value=st.session_state.serv_km_inicial,
+                    key="serv_km_inicial",
                     disabled=campos_desabilitados,
                     placeholder="Somente números",
-                    key=f"form_serv_km_inicial_{form_version}",
                 )
             with col6:
-                serv_km_final_form = st.text_input(
+                st.text_input(
                     "KM FINAL",
-                    value=st.session_state.serv_km_final,
+                    key="serv_km_final",
                     disabled=campos_desabilitados,
                     placeholder="Obrigatório apenas ao concluir serviço aberto",
-                    key=f"form_serv_km_final_{form_version}",
                 )
 
         with st.container(border=True):
             st.markdown("### 👥 Equipe de Serviço")
             col_eq1, col_eq2 = st.columns(2)
             with col_eq1:
-                serv_supervisor_form = st.selectbox(
+                st.selectbox(
                     "Supervisor",
                     options=opcoes_usuarios,
                     index=indice_opcao(opcoes_usuarios, st.session_state.serv_supervisor),
+                    key="serv_supervisor",
                     disabled=campos_desabilitados,
-                    key=f"form_serv_supervisor_{form_version}",
                 )
-                serv_motorista_form = st.selectbox(
+                st.selectbox(
                     "Motorista",
                     options=opcoes_usuarios,
                     index=indice_opcao(opcoes_usuarios, st.session_state.serv_motorista),
+                    key="serv_motorista",
                     disabled=campos_desabilitados,
-                    key=f"form_serv_motorista_{form_version}",
                 )
-                serv_seguranca_1_form = st.selectbox(
+                st.selectbox(
                     "Segurança1",
                     options=opcoes_usuarios,
                     index=indice_opcao(opcoes_usuarios, st.session_state.serv_seguranca_1),
+                    key="serv_seguranca_1",
                     disabled=campos_desabilitados,
-                    key=f"form_serv_seguranca_1_{form_version}",
                 )
             with col_eq2:
-                serv_seguranca_2_form = st.selectbox(
+                st.selectbox(
                     "Segurança2",
                     options=opcoes_usuarios,
                     index=indice_opcao(opcoes_usuarios, st.session_state.serv_seguranca_2),
+                    key="serv_seguranca_2",
                     disabled=campos_desabilitados,
-                    key=f"form_serv_seguranca_2_{form_version}",
                 )
-                serv_seguranca_3_form = st.selectbox(
+                st.selectbox(
                     "Segurança3",
                     options=opcoes_usuarios,
                     index=indice_opcao(opcoes_usuarios, st.session_state.serv_seguranca_3),
+                    key="serv_seguranca_3",
                     disabled=campos_desabilitados,
-                    key=f"form_serv_seguranca_3_{form_version}",
                 )
 
         with st.container(border=True):
             st.markdown("### 📝 Observações Gerais")
-            serv_observacoes_form = st.text_area(
+            st.text_area(
                 "Observações gerais",
-                value=st.session_state.serv_observacoes,
+                key="serv_observacoes",
                 disabled=campos_desabilitados,
                 placeholder="Descreva qualquer alteração ocorrida no início do serviço. Será salvo em CAIXA ALTA.",
                 height=140,
-                key=f"form_serv_observacoes_{form_version}",
             )
 
         st.markdown("---")
@@ -2921,22 +2891,53 @@ def render_assuncao_servico():
         cancelar_desabilitado = modo not in ["novo", "editar"]
         excluir_desabilitado = modo in ["novo", "editar"] or servico_atual is None
         continuar_desabilitado = modo in ["novo", "editar"] or servico_atual is None or not json_loads_lista((servico_atual or {}).get("NOMES_AREAS_JSON", "[]"))
+        # Concluir Serviço fica sempre disponível.
+        # Se houver novo/edição em andamento, ele cancela a operação e reexibe o Login.
         concluir_desabilitado = False
 
         with colb1:
-            botao_serv_novo = st.button("🆕 Novo", disabled=novo_desabilitado, use_container_width=True, key="btn_serv_novo")
+            botao_serv_novo = st.form_submit_button(
+                "🆕 Novo",
+                disabled=novo_desabilitado,
+                use_container_width=True,
+            )
         with colb2:
-            botao_serv_editar = st.button("✏️ Editar", disabled=editar_desabilitado, use_container_width=True, key="btn_serv_editar")
+            botao_serv_editar = st.form_submit_button(
+                "✏️ Editar",
+                disabled=editar_desabilitado,
+                use_container_width=True,
+            )
         with colb3:
-            botao_serv_salvar = st.button("💾 Salvar", type="primary", disabled=salvar_desabilitado, use_container_width=True, key="btn_serv_salvar")
+            botao_serv_salvar = st.form_submit_button(
+                "💾 Salvar",
+                type="primary",
+                disabled=salvar_desabilitado,
+                use_container_width=True,
+            )
         with colb4:
-            botao_serv_cancelar = st.button("↩️ Cancelar", disabled=cancelar_desabilitado, use_container_width=True, key="btn_serv_cancelar")
+            botao_serv_cancelar = st.form_submit_button(
+                "↩️ Cancelar",
+                disabled=cancelar_desabilitado,
+                use_container_width=True,
+            )
         with colb5:
-            botao_serv_excluir = st.button("🗑️ Excluir", disabled=excluir_desabilitado, use_container_width=True, key="btn_serv_excluir")
+            botao_serv_excluir = st.form_submit_button(
+                "🗑️ Excluir",
+                disabled=excluir_desabilitado,
+                use_container_width=True,
+            )
         with colb6:
-            botao_serv_continuar = st.button("▶️ Continuar Supervisão", disabled=continuar_desabilitado, use_container_width=True, key="btn_serv_continuar")
+            botao_serv_continuar = st.form_submit_button(
+                "▶️ Continuar Supervisão",
+                disabled=continuar_desabilitado,
+                use_container_width=True,
+            )
         with colb7:
-            botao_serv_concluir = st.button("✅ Concluir Serviço", disabled=concluir_desabilitado, use_container_width=True, key="btn_serv_concluir")
+            botao_serv_concluir = st.form_submit_button(
+                "✅ Concluir Serviço",
+                disabled=concluir_desabilitado,
+                use_container_width=True,
+            )
 
     if botao_serv_novo:
         solicitar_confirmacao("servico_novo", "Você está prestes a iniciar uma nova assunção de serviço.", {})
@@ -2967,122 +2968,17 @@ def render_assuncao_servico():
         st.rerun()
 
     if botao_serv_salvar:
-        # Leitura direta dos widgets atuais. Como os campos não estão mais dentro
-        # de st.form, o session_state já contém o valor editado no momento do clique.
-        # Mantemos fallback nas variáveis locais para máxima compatibilidade.
-        form_version_atual = st.session_state.get("serv_form_version", form_version)
-
-        unidade_form = normalizar_texto(st.session_state.get("serv_unidade", ""))
-        serv_data_form = st.session_state.get(f"form_serv_data_{form_version_atual}", serv_data_form)
-        serv_inicio_form = st.session_state.get(f"form_serv_inicio_{form_version_atual}", serv_inicio_form)
-        serv_termino_form = st.session_state.get(f"form_serv_termino_{form_version_atual}", serv_termino_form)
-        serv_viatura_form = st.session_state.get(f"form_serv_viatura_{form_version_atual}", serv_viatura_form)
-        serv_km_inicial_form = st.session_state.get(f"form_serv_km_inicial_{form_version_atual}", serv_km_inicial_form)
-        serv_km_final_form = st.session_state.get(f"form_serv_km_final_{form_version_atual}", serv_km_final_form)
-        serv_supervisor_form = st.session_state.get(f"form_serv_supervisor_{form_version_atual}", serv_supervisor_form)
-        serv_motorista_form = st.session_state.get(f"form_serv_motorista_{form_version_atual}", serv_motorista_form)
-        serv_seguranca_1_form = st.session_state.get(f"form_serv_seguranca_1_{form_version_atual}", serv_seguranca_1_form)
-        serv_seguranca_2_form = st.session_state.get(f"form_serv_seguranca_2_{form_version_atual}", serv_seguranca_2_form)
-        serv_seguranca_3_form = st.session_state.get(f"form_serv_seguranca_3_{form_version_atual}", serv_seguranca_3_form)
-        serv_observacoes_form = st.session_state.get(f"form_serv_observacoes_{form_version_atual}", serv_observacoes_form)
-
-        # Recarrega o modo/registro no exato momento do clique, evitando usar
-        # variáveis locais antigas de renderização.
-        modo = st.session_state.get("modo_servico", modo)
-        servico_atual = st.session_state.get("servico_atual", servico_atual)
-
-        data_servico = data_para_texto(serv_data_form)
-        inicio = hora_para_texto(serv_inicio_form)
-        termino = hora_para_texto(serv_termino_form)
-        viatura = texto_caixa_alta(serv_viatura_form)
-        km_inicial = normalizar_texto(serv_km_inicial_form)
-        km_final = normalizar_texto(serv_km_final_form)
-        num_areas = para_int(st.session_state.get("serv_num_areas", 0), 0)
-        supervisor = normalizar_texto(serv_supervisor_form)
-        motorista = normalizar_texto(serv_motorista_form)
-        seguranca_1 = normalizar_texto(serv_seguranca_1_form)
-        seguranca_2 = normalizar_texto(serv_seguranca_2_form)
-        seguranca_3 = normalizar_texto(serv_seguranca_3_form)
-        observacoes = texto_caixa_alta(serv_observacoes_form)
-
-        erros = []
-        if not unidade_form:
-            erros.append("Selecione a unidade.")
-        if not data_servico:
-            erros.append("Selecione a data.")
-        if not inicio:
-            erros.append("Informe o início do serviço.")
-        if not termino:
-            erros.append("Informe o término do serviço.")
-        if not viatura:
-            erros.append("Informe a viatura.")
-        if not km_inicial or not apenas_digitos(km_inicial):
-            erros.append("Informe o KM inicial usando somente números.")
-        if km_final and not apenas_digitos(km_final):
-            erros.append("Informe o KM final usando somente números, ou deixe em branco até a conclusão.")
-        if num_areas < 1 or num_areas > 5:
-            erros.append("Informe o número de áreas supervisionadas entre 1 e 5.")
-        if not supervisor:
-            erros.append("Selecione o Supervisor.")
-
-        areas = []
-        for i in range(1, num_areas + 1):
-            valor_area_atual = st.session_state.get(
-                f"form_serv_area_{i}_{form_version_atual}",
-                areas_form.get(i, "")
-            )
-            nome_area = texto_caixa_alta(valor_area_atual)
-            if not nome_area:
-                erros.append(f"Informe o nome da área {i}.")
-            else:
-                areas.append(nome_area)
-
-        if len(set(areas)) != len(areas):
-            erros.append("Não repita nomes de áreas.")
-
-        nomes_reservados_menu = {"TERMINAR SUPERVISÃO", "TERMINAR SUPERVISAO"}
-        if any(area in nomes_reservados_menu for area in areas):
-            erros.append("O nome TERMINAR SUPERVISÃO é reservado para a aba do menu. Use outro nome para a área.")
-
+        # SALVAR DIRETO: os dados que estão no formulário do Streamlit seguem
+        # diretamente para o Google Sheets. Não há confirmação intermediária aqui,
+        # pois essa segunda renderização era o que fazia os dados antigos do Sheets
+        # voltarem para o formulário e anularem a edição.
+        erros, dados = coletar_dados_servico()
         if erros:
             for erro in erros:
                 st.warning(f"⚠️ {erro}")
             st.stop()
 
-        dados = {
-            "UNIDADE": unidade_form,
-            "DATA": data_servico,
-            "INICIO_SERVICO": inicio,
-            "TERMINO_SERVICO": termino,
-            "VIATURA": viatura,
-            "KM_INICIAL": apenas_digitos(km_inicial),
-            "KM_FINAL": apenas_digitos(km_final),
-            "NUM_AREAS": num_areas,
-            "AREAS": areas,
-            "SUPERVISOR": supervisor,
-            "MOTORISTA": motorista,
-            "SEGURANCA_1": seguranca_1,
-            "SEGURANCA_2": seguranca_2,
-            "SEGURANCA_3": seguranca_3,
-            "OBSERVACOES_GERAIS": observacoes,
-            "MODO": modo,
-        }
-
-        # Sincroniza também o estado visual com os dados submetidos.
-        st.session_state.serv_data = serv_data_form
-        st.session_state.serv_inicio = serv_inicio_form
-        st.session_state.serv_termino = serv_termino_form
-        st.session_state.serv_viatura = viatura
-        st.session_state.serv_km_inicial = apenas_digitos(km_inicial)
-        st.session_state.serv_km_final = apenas_digitos(km_final)
-        st.session_state.serv_supervisor = supervisor
-        st.session_state.serv_motorista = motorista
-        st.session_state.serv_seguranca_1 = seguranca_1
-        st.session_state.serv_seguranca_2 = seguranca_2
-        st.session_state.serv_seguranca_3 = seguranca_3
-        st.session_state.serv_observacoes = observacoes
-        for i in range(1, 6):
-            st.session_state[f"serv_area_{i}"] = areas[i - 1] if i <= len(areas) else ""
+        dados["MODO"] = modo
 
         if modo == "novo":
             sucesso, resultado = adicionar_servico(dados)
@@ -3091,20 +2987,14 @@ def render_assuncao_servico():
                 st.session_state.tipo_msg_servico = "error"
                 st.rerun()
 
-            # NÃO chame carregar_servico_na_tela() aqui. Neste ponto os widgets
-            # da Assunção já foram instanciados; alterar chaves como serv_unidade
-            # depois disso gera erro no Streamlit Cloud e impede o salvamento.
-            # O registro já foi salvo no Sheets por adicionar_servico(); basta
-            # guardar o resultado em memória e abrir o menu das áreas.
             st.session_state.servico_atual = resultado
-            st.session_state.modo_servico = "visualizar"
             st.session_state.assuncao_ativa = True
             ativar_menu_areas_do_servico(resultado)
-            limpar_cache_servicos()
-            st.session_state.area_menu_msg = "✅ Serviço salvo com sucesso no Google Sheets. As abas das áreas foram exibidas no menu."
+            st.session_state.area_menu_msg = "✅ Serviço salvo com sucesso. As abas das áreas foram exibidas no menu."
             st.session_state.area_menu_tipo_msg = "success"
-            st.session_state.msg_servico = "✅ Serviço salvo com sucesso no Google Sheets. As abas das áreas foram exibidas no menu."
+            st.session_state.msg_servico = "✅ Serviço salvo com sucesso. As abas das áreas foram exibidas no menu."
             st.session_state.tipo_msg_servico = "success"
+            limpar_cache_servicos()
             st.rerun()
 
         if modo == "editar":
@@ -3114,6 +3004,7 @@ def render_assuncao_servico():
 
             dados["ID_SERVICO"] = servico_atual.get("ID_SERVICO", "")
             dados["VERSAO"] = para_int(servico_atual.get("VERSAO", ""), 1)
+            dados["UNIDADE_ORIGINAL"] = servico_atual.get("UNIDADE", dados.get("UNIDADE", ""))
 
             sucesso, resultado = atualizar_servico(dados)
             if not sucesso:
@@ -3122,16 +3013,16 @@ def render_assuncao_servico():
                 st.rerun()
 
             st.session_state.servico_atual = resultado
-            st.session_state.modo_servico = "visualizar"
             st.session_state.assuncao_ativa = True
             desativar_menu_areas()
             limpar_cache_servicos()
-            # A limpeza visual mexe em chaves de widgets como serv_num_areas.
-            # Por isso ela é agendada para o próximo rerun, antes da criação dos widgets.
-            st.session_state.limpar_visual_servico_apos_rerun = True
-            st.session_state.msg_servico = "✅ Serviço atualizado com sucesso no Google Sheets. A tela foi limpa; selecione Unidade e Data para visualizar novamente."
+            st.session_state.limpar_visual_servico_pendente = True
+            st.session_state.msg_servico = "✅ Serviço atualizado no Google Sheets com os dados preenchidos no formulário. A tela foi limpa; selecione Unidade e Data para visualizar novamente."
             st.session_state.tipo_msg_servico = "success"
             st.rerun()
+
+        st.warning("⚠️ Clique em Novo ou Editar antes de salvar.")
+        st.stop()
 
 
 # ==========================================================
