@@ -2927,6 +2927,13 @@ def render_assuncao_servico():
         # Se houver novo/edição em andamento, ele cancela a operação e reexibe o Login.
         concluir_desabilitado = False
 
+        confirmar_salvamento_servico = st.checkbox(
+            "✅ Confirmo que desejo salvar os dados preenchidos acima",
+            key="serv_confirmar_salvar",
+            disabled=salvar_desabilitado,
+            help="Marque esta confirmação antes de clicar em Salvar. Isso evita uma segunda tela de confirmação e preserva os dados recém-editados do formulário.",
+        )
+
         with colb1:
             botao_serv_novo = st.form_submit_button(
                 "🆕 Novo",
@@ -3000,6 +3007,15 @@ def render_assuncao_servico():
         st.rerun()
 
     if botao_serv_salvar:
+        # Correção definitiva do salvamento na edição:
+        # Salvar é executado no MESMO submit do st.form, usando os valores atuais
+        # retornados pelos widgets. Antes, os dados eram enviados para uma confirmação
+        # em outra rerun e, em alguns casos, os valores antigos voltavam a prevalecer,
+        # parecendo que o botão Salvar funcionava como Cancelar.
+        if not confirmar_salvamento_servico:
+            st.warning("⚠️ Marque a confirmação de salvamento antes de clicar em Salvar.")
+            st.stop()
+
         erros, dados = coletar_dados_servico(valores_form_servico)
         if erros:
             for erro in erros:
@@ -3007,15 +3023,50 @@ def render_assuncao_servico():
             st.stop()
 
         dados["MODO"] = modo
+
+        if modo == "novo":
+            sucesso, resultado = adicionar_servico(dados)
+            if not sucesso:
+                st.session_state.msg_servico = resultado
+                st.session_state.tipo_msg_servico = "error"
+                st.rerun()
+
+            carregar_servico_na_tela(resultado)
+            st.session_state.assuncao_ativa = True
+            ativar_menu_areas_do_servico(resultado)
+            st.session_state.area_menu_msg = "✅ Serviço salvo com sucesso. As abas das áreas foram exibidas no menu."
+            st.session_state.area_menu_tipo_msg = "success"
+            st.session_state.msg_servico = "✅ Serviço salvo com sucesso. As abas das áreas foram exibidas no menu."
+            st.session_state.tipo_msg_servico = "success"
+            st.rerun()
+
         if modo == "editar":
             if not servico_atual:
                 st.warning("⚠️ Não há serviço aberto para editar.")
                 st.stop()
+
             dados["ID_SERVICO"] = servico_atual.get("ID_SERVICO", "")
             dados["VERSAO"] = para_int(servico_atual.get("VERSAO", ""), 1)
 
-        solicitar_confirmacao("servico_salvar", "Você está prestes a salvar os dados da assunção do serviço.", dados)
-        st.rerun()
+            sucesso, resultado = atualizar_servico(dados)
+            if not sucesso:
+                st.session_state.msg_servico = resultado
+                st.session_state.tipo_msg_servico = "warning"
+                st.rerun()
+
+            # Mantém o registro atualizado em memória, mas limpa os campos visuais
+            # conforme regra já adotada: os dados só reaparecem ao selecionar Unidade + Data
+            # ou ao clicar em Editar novamente.
+            st.session_state.servico_atual = resultado
+            st.session_state.assuncao_ativa = True
+            desativar_menu_areas()
+            limpar_campos_servico_mantendo_registro_atual()
+            st.session_state.msg_servico = "✅ Serviço atualizado com sucesso. A tela foi limpa; selecione Unidade e Data para visualizar novamente."
+            st.session_state.tipo_msg_servico = "success"
+            st.rerun()
+
+        st.warning("⚠️ Clique em Novo ou Editar antes de salvar.")
+        st.stop()
 
 
 # ==========================================================
