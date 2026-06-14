@@ -2775,7 +2775,10 @@ def render_assuncao_servico():
     #   e os valores editados podiam ser perdidos/reaproveitados do registro anterior.
     form_version = st.session_state.get("serv_form_version", 0)
 
-    with st.form("form_servico_principal", clear_on_submit=False):
+    # Campos fora de st.form para garantir que os valores editados sejam
+    # gravados imediatamente no session_state antes do clique em Salvar.
+    # Isso corrige o caso em que Salvar após Editar se comportava como Cancelar.
+    with st.container():
         with st.container(border=True):
             st.markdown("### 📍 Áreas Supervisionadas")
             qtd_areas_visiveis = para_int(st.session_state.serv_num_areas, 0)
@@ -2921,19 +2924,19 @@ def render_assuncao_servico():
         concluir_desabilitado = False
 
         with colb1:
-            botao_serv_novo = st.form_submit_button("🆕 Novo", disabled=novo_desabilitado, use_container_width=True)
+            botao_serv_novo = st.button("🆕 Novo", disabled=novo_desabilitado, use_container_width=True, key="btn_serv_novo")
         with colb2:
-            botao_serv_editar = st.form_submit_button("✏️ Editar", disabled=editar_desabilitado, use_container_width=True)
+            botao_serv_editar = st.button("✏️ Editar", disabled=editar_desabilitado, use_container_width=True, key="btn_serv_editar")
         with colb3:
-            botao_serv_salvar = st.form_submit_button("💾 Salvar", type="primary", disabled=salvar_desabilitado, use_container_width=True)
+            botao_serv_salvar = st.button("💾 Salvar", type="primary", disabled=salvar_desabilitado, use_container_width=True, key="btn_serv_salvar")
         with colb4:
-            botao_serv_cancelar = st.form_submit_button("↩️ Cancelar", disabled=cancelar_desabilitado, use_container_width=True)
+            botao_serv_cancelar = st.button("↩️ Cancelar", disabled=cancelar_desabilitado, use_container_width=True, key="btn_serv_cancelar")
         with colb5:
-            botao_serv_excluir = st.form_submit_button("🗑️ Excluir", disabled=excluir_desabilitado, use_container_width=True)
+            botao_serv_excluir = st.button("🗑️ Excluir", disabled=excluir_desabilitado, use_container_width=True, key="btn_serv_excluir")
         with colb6:
-            botao_serv_continuar = st.form_submit_button("▶️ Continuar Supervisão", disabled=continuar_desabilitado, use_container_width=True)
+            botao_serv_continuar = st.button("▶️ Continuar Supervisão", disabled=continuar_desabilitado, use_container_width=True, key="btn_serv_continuar")
         with colb7:
-            botao_serv_concluir = st.form_submit_button("✅ Concluir Serviço", disabled=concluir_desabilitado, use_container_width=True)
+            botao_serv_concluir = st.button("✅ Concluir Serviço", disabled=concluir_desabilitado, use_container_width=True, key="btn_serv_concluir")
 
     if botao_serv_novo:
         solicitar_confirmacao("servico_novo", "Você está prestes a iniciar uma nova assunção de serviço.", {})
@@ -2964,14 +2967,37 @@ def render_assuncao_servico():
         st.rerun()
 
     if botao_serv_salvar:
-        unidade_form = normalizar_texto(st.session_state.serv_unidade)
+        # Leitura direta dos widgets atuais. Como os campos não estão mais dentro
+        # de st.form, o session_state já contém o valor editado no momento do clique.
+        # Mantemos fallback nas variáveis locais para máxima compatibilidade.
+        form_version_atual = st.session_state.get("serv_form_version", form_version)
+
+        unidade_form = normalizar_texto(st.session_state.get("serv_unidade", ""))
+        serv_data_form = st.session_state.get(f"form_serv_data_{form_version_atual}", serv_data_form)
+        serv_inicio_form = st.session_state.get(f"form_serv_inicio_{form_version_atual}", serv_inicio_form)
+        serv_termino_form = st.session_state.get(f"form_serv_termino_{form_version_atual}", serv_termino_form)
+        serv_viatura_form = st.session_state.get(f"form_serv_viatura_{form_version_atual}", serv_viatura_form)
+        serv_km_inicial_form = st.session_state.get(f"form_serv_km_inicial_{form_version_atual}", serv_km_inicial_form)
+        serv_km_final_form = st.session_state.get(f"form_serv_km_final_{form_version_atual}", serv_km_final_form)
+        serv_supervisor_form = st.session_state.get(f"form_serv_supervisor_{form_version_atual}", serv_supervisor_form)
+        serv_motorista_form = st.session_state.get(f"form_serv_motorista_{form_version_atual}", serv_motorista_form)
+        serv_seguranca_1_form = st.session_state.get(f"form_serv_seguranca_1_{form_version_atual}", serv_seguranca_1_form)
+        serv_seguranca_2_form = st.session_state.get(f"form_serv_seguranca_2_{form_version_atual}", serv_seguranca_2_form)
+        serv_seguranca_3_form = st.session_state.get(f"form_serv_seguranca_3_{form_version_atual}", serv_seguranca_3_form)
+        serv_observacoes_form = st.session_state.get(f"form_serv_observacoes_{form_version_atual}", serv_observacoes_form)
+
+        # Recarrega o modo/registro no exato momento do clique, evitando usar
+        # variáveis locais antigas de renderização.
+        modo = st.session_state.get("modo_servico", modo)
+        servico_atual = st.session_state.get("servico_atual", servico_atual)
+
         data_servico = data_para_texto(serv_data_form)
         inicio = hora_para_texto(serv_inicio_form)
         termino = hora_para_texto(serv_termino_form)
         viatura = texto_caixa_alta(serv_viatura_form)
         km_inicial = normalizar_texto(serv_km_inicial_form)
         km_final = normalizar_texto(serv_km_final_form)
-        num_areas = para_int(st.session_state.serv_num_areas, 0)
+        num_areas = para_int(st.session_state.get("serv_num_areas", 0), 0)
         supervisor = normalizar_texto(serv_supervisor_form)
         motorista = normalizar_texto(serv_motorista_form)
         seguranca_1 = normalizar_texto(serv_seguranca_1_form)
@@ -3001,7 +3027,11 @@ def render_assuncao_servico():
 
         areas = []
         for i in range(1, num_areas + 1):
-            nome_area = texto_caixa_alta(areas_form.get(i, ""))
+            valor_area_atual = st.session_state.get(
+                f"form_serv_area_{i}_{form_version_atual}",
+                areas_form.get(i, "")
+            )
+            nome_area = texto_caixa_alta(valor_area_atual)
             if not nome_area:
                 erros.append(f"Informe o nome da área {i}.")
             else:
