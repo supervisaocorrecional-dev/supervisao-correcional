@@ -1728,38 +1728,22 @@ def montar_opcoes_usuarios(df_usuarios: pd.DataFrame) -> list:
     return opcoes
 
 
-def coletar_dados_servico(valores_form: dict | None = None):
-    """
-    Coleta e valida os dados da Assunção do Serviço.
+def coletar_dados_servico():
+    unidade = normalizar_texto(st.session_state.serv_unidade)
+    data_servico = data_para_texto(st.session_state.serv_data)
+    inicio = hora_para_texto(st.session_state.serv_inicio)
+    termino = hora_para_texto(st.session_state.serv_termino)
+    viatura = texto_caixa_alta(st.session_state.serv_viatura)
+    km_inicial = normalizar_texto(st.session_state.serv_km_inicial)
+    km_final = normalizar_texto(st.session_state.serv_km_final)
+    num_areas = para_int(st.session_state.serv_num_areas, 0)
 
-    Correção importante:
-    - Quando os campos ficam dentro de st.form, os valores digitados no formulário
-      precisam ser lidos diretamente dos retornos dos widgets no momento do submit.
-    - Antes, o salvamento dependia apenas de st.session_state e, em alguns casos,
-      ao editar e salvar, os dados antigos eram reaproveitados.
-    """
-    valores_form = valores_form or {}
-
-    def pegar(chave: str, padrao: Any = ""):
-        if chave in valores_form:
-            return valores_form.get(chave)
-        return st.session_state.get(chave, padrao)
-
-    unidade = normalizar_texto(pegar("serv_unidade", st.session_state.serv_unidade))
-    data_servico = data_para_texto(pegar("serv_data"))
-    inicio = hora_para_texto(pegar("serv_inicio"))
-    termino = hora_para_texto(pegar("serv_termino"))
-    viatura = texto_caixa_alta(pegar("serv_viatura"))
-    km_inicial = normalizar_texto(pegar("serv_km_inicial"))
-    km_final = normalizar_texto(pegar("serv_km_final"))
-    num_areas = para_int(pegar("serv_num_areas", st.session_state.serv_num_areas), 0)
-
-    supervisor = normalizar_texto(pegar("serv_supervisor"))
-    motorista = normalizar_texto(pegar("serv_motorista"))
-    seguranca_1 = normalizar_texto(pegar("serv_seguranca_1"))
-    seguranca_2 = normalizar_texto(pegar("serv_seguranca_2"))
-    seguranca_3 = normalizar_texto(pegar("serv_seguranca_3"))
-    observacoes = texto_caixa_alta(pegar("serv_observacoes"))
+    supervisor = normalizar_texto(st.session_state.serv_supervisor)
+    motorista = normalizar_texto(st.session_state.serv_motorista)
+    seguranca_1 = normalizar_texto(st.session_state.serv_seguranca_1)
+    seguranca_2 = normalizar_texto(st.session_state.serv_seguranca_2)
+    seguranca_3 = normalizar_texto(st.session_state.serv_seguranca_3)
+    observacoes = texto_caixa_alta(st.session_state.serv_observacoes)
 
     erros = []
 
@@ -1788,7 +1772,7 @@ def coletar_dados_servico(valores_form: dict | None = None):
 
     areas = []
     for i in range(1, num_areas + 1):
-        nome_area = texto_caixa_alta(pegar(f"serv_area_{i}", ""))
+        nome_area = texto_caixa_alta(st.session_state.get(f"serv_area_{i}", ""))
         if not nome_area:
             erros.append(f"Informe o nome da área {i}.")
         else:
@@ -1820,6 +1804,89 @@ def coletar_dados_servico(valores_form: dict | None = None):
     }
 
     return erros, dados
+
+
+def coletar_dados_servico_de_valores(valores_form: dict):
+    """
+    Coleta os dados usando os valores retornados diretamente pelos widgets do st.form.
+
+    Isso evita o problema observado na edição da Assunção: ao clicar em Salvar,
+    alguns valores alterados podiam ainda não estar refletidos corretamente no
+    st.session_state, principalmente quando havia confirmação em uma segunda
+    renderização. Esta função usa os valores atuais do formulário no mesmo clique.
+    """
+    unidade = normalizar_texto(valores_form.get("serv_unidade", st.session_state.get("serv_unidade", "")))
+    data_servico = data_para_texto(valores_form.get("serv_data"))
+    inicio = hora_para_texto(valores_form.get("serv_inicio"))
+    termino = hora_para_texto(valores_form.get("serv_termino"))
+    viatura = texto_caixa_alta(valores_form.get("serv_viatura", ""))
+    km_inicial = normalizar_texto(valores_form.get("serv_km_inicial", ""))
+    km_final = normalizar_texto(valores_form.get("serv_km_final", ""))
+    num_areas = para_int(valores_form.get("serv_num_areas", st.session_state.get("serv_num_areas", 0)), 0)
+
+    supervisor = normalizar_texto(valores_form.get("serv_supervisor", ""))
+    motorista = normalizar_texto(valores_form.get("serv_motorista", ""))
+    seguranca_1 = normalizar_texto(valores_form.get("serv_seguranca_1", ""))
+    seguranca_2 = normalizar_texto(valores_form.get("serv_seguranca_2", ""))
+    seguranca_3 = normalizar_texto(valores_form.get("serv_seguranca_3", ""))
+    observacoes = texto_caixa_alta(valores_form.get("serv_observacoes", ""))
+
+    erros = []
+
+    if not unidade:
+        erros.append("Selecione a unidade.")
+    if not data_servico:
+        erros.append("Selecione a data.")
+    if not inicio:
+        erros.append("Informe o início do serviço.")
+    if not termino:
+        erros.append("Informe o término do serviço.")
+    if not viatura:
+        erros.append("Informe a viatura.")
+    if not km_inicial or not apenas_digitos(km_inicial):
+        erros.append("Informe o KM inicial usando somente números.")
+    if km_final and not apenas_digitos(km_final):
+        erros.append("Informe o KM final usando somente números, ou deixe em branco até a conclusão.")
+    if num_areas < 1 or num_areas > 5:
+        erros.append("Informe o número de áreas supervisionadas entre 1 e 5.")
+    if not supervisor:
+        erros.append("Selecione o Supervisor.")
+
+    areas = []
+    for i in range(1, num_areas + 1):
+        nome_area = texto_caixa_alta(valores_form.get(f"serv_area_{i}", ""))
+        if not nome_area:
+            erros.append(f"Informe o nome da área {i}.")
+        else:
+            areas.append(nome_area)
+
+    if len(set(areas)) != len(areas):
+        erros.append("Não repita nomes de áreas.")
+
+    nomes_reservados_menu = {"TERMINAR SUPERVISÃO", "TERMINAR SUPERVISAO"}
+    if any(area in nomes_reservados_menu for area in areas):
+        erros.append("O nome TERMINAR SUPERVISÃO é reservado para a aba do menu. Use outro nome para a área.")
+
+    dados = {
+        "UNIDADE": unidade,
+        "DATA": data_servico,
+        "INICIO_SERVICO": inicio,
+        "TERMINO_SERVICO": termino,
+        "VIATURA": viatura,
+        "KM_INICIAL": apenas_digitos(km_inicial),
+        "KM_FINAL": apenas_digitos(km_final),
+        "NUM_AREAS": num_areas,
+        "AREAS": areas,
+        "SUPERVISOR": supervisor,
+        "MOTORISTA": motorista,
+        "SEGURANCA_1": seguranca_1,
+        "SEGURANCA_2": seguranca_2,
+        "SEGURANCA_3": seguranca_3,
+        "OBSERVACOES_GERAIS": observacoes,
+    }
+
+    return erros, dados
+
 
 # ==========================================================
 # CABEÇALHO
@@ -2773,12 +2840,8 @@ def render_assuncao_servico():
     # Os campos de edição ficam dentro de um st.form para evitar que o Streamlit
     # recarregue a página a cada troca rápida de campo. Assim o modo EDITAR não
     # se perde e o botão SALVAR permanece ativo até o usuário decidir salvar ou cancelar.
-    #
-    # Os valores abaixo são capturados diretamente dos widgets do form.
-    # Isso evita que, na edição, o botão Salvar reaproveite dados antigos do session_state.
-    valores_form_servico = {"serv_unidade": st.session_state.serv_unidade, "serv_num_areas": st.session_state.serv_num_areas}
-
     with st.form("form_servico_principal", clear_on_submit=False):
+        valores_areas_form = {}
         with st.container(border=True):
             st.markdown("### 📍 Áreas Supervisionadas")
             qtd_areas_visiveis = para_int(st.session_state.serv_num_areas, 0)
@@ -2799,7 +2862,7 @@ def render_assuncao_servico():
                     coluna_destino = col_area_1 if i % 2 == 1 else col_area_2
 
                     with coluna_destino:
-                        valores_form_servico[f"serv_area_{i}"] = st.text_input(
+                        valores_areas_form[i] = st.text_input(
                             f"NOME DA ÁREA {i}",
                             key=f"serv_area_{i}",
                             disabled=campos_desabilitados,
@@ -2809,7 +2872,6 @@ def render_assuncao_servico():
             # Se o usuário reduziu a quantidade, limpamos os campos que deixaram de existir
             # para evitar que áreas antigas escondidas sejam aproveitadas por engano.
             for i in range(qtd_areas_visiveis + 1, 6):
-                valores_form_servico[f"serv_area_{i}"] = ""
                 if st.session_state.get(f"serv_area_{i}"):
                     st.session_state[f"serv_area_{i}"] = ""
 
@@ -2817,7 +2879,7 @@ def render_assuncao_servico():
             st.markdown("### 🗓️ Dados do Serviço")
             col1, col2, col3 = st.columns(3)
             with col1:
-                valores_form_servico["serv_data"] = st.date_input(
+                valor_serv_data_form = st.date_input(
                     "DATA",
                     key="serv_data",
                     value=st.session_state.serv_data,
@@ -2825,14 +2887,14 @@ def render_assuncao_servico():
                     disabled=campos_desabilitados,
                 )
             with col2:
-                valores_form_servico["serv_inicio"] = st.time_input(
+                valor_serv_inicio_form = st.time_input(
                     "INÍCIO DO SERVIÇO",
                     key="serv_inicio",
                     value=st.session_state.serv_inicio,
                     disabled=campos_desabilitados,
                 )
             with col3:
-                valores_form_servico["serv_termino"] = st.time_input(
+                valor_serv_termino_form = st.time_input(
                     "TÉRMINO DO SERVIÇO",
                     key="serv_termino",
                     value=st.session_state.serv_termino,
@@ -2841,21 +2903,21 @@ def render_assuncao_servico():
 
             col4, col5, col6 = st.columns(3)
             with col4:
-                valores_form_servico["serv_viatura"] = st.text_input(
+                valor_serv_viatura_form = st.text_input(
                     "VIATURA",
                     key="serv_viatura",
                     disabled=campos_desabilitados,
                     placeholder="Ex.: D-0000",
                 )
             with col5:
-                valores_form_servico["serv_km_inicial"] = st.text_input(
+                valor_serv_km_inicial_form = st.text_input(
                     "KM INICIAL",
                     key="serv_km_inicial",
                     disabled=campos_desabilitados,
                     placeholder="Somente números",
                 )
             with col6:
-                valores_form_servico["serv_km_final"] = st.text_input(
+                valor_serv_km_final_form = st.text_input(
                     "KM FINAL",
                     key="serv_km_final",
                     disabled=campos_desabilitados,
@@ -2866,21 +2928,21 @@ def render_assuncao_servico():
             st.markdown("### 👥 Equipe de Serviço")
             col_eq1, col_eq2 = st.columns(2)
             with col_eq1:
-                valores_form_servico["serv_supervisor"] = st.selectbox(
+                valor_serv_supervisor_form = st.selectbox(
                     "Supervisor",
                     options=opcoes_usuarios,
                     index=indice_opcao(opcoes_usuarios, st.session_state.serv_supervisor),
                     key="serv_supervisor",
                     disabled=campos_desabilitados,
                 )
-                valores_form_servico["serv_motorista"] = st.selectbox(
+                valor_serv_motorista_form = st.selectbox(
                     "Motorista",
                     options=opcoes_usuarios,
                     index=indice_opcao(opcoes_usuarios, st.session_state.serv_motorista),
                     key="serv_motorista",
                     disabled=campos_desabilitados,
                 )
-                valores_form_servico["serv_seguranca_1"] = st.selectbox(
+                valor_serv_seguranca_1_form = st.selectbox(
                     "Segurança1",
                     options=opcoes_usuarios,
                     index=indice_opcao(opcoes_usuarios, st.session_state.serv_seguranca_1),
@@ -2888,14 +2950,14 @@ def render_assuncao_servico():
                     disabled=campos_desabilitados,
                 )
             with col_eq2:
-                valores_form_servico["serv_seguranca_2"] = st.selectbox(
+                valor_serv_seguranca_2_form = st.selectbox(
                     "Segurança2",
                     options=opcoes_usuarios,
                     index=indice_opcao(opcoes_usuarios, st.session_state.serv_seguranca_2),
                     key="serv_seguranca_2",
                     disabled=campos_desabilitados,
                 )
-                valores_form_servico["serv_seguranca_3"] = st.selectbox(
+                valor_serv_seguranca_3_form = st.selectbox(
                     "Segurança3",
                     options=opcoes_usuarios,
                     index=indice_opcao(opcoes_usuarios, st.session_state.serv_seguranca_3),
@@ -2905,7 +2967,7 @@ def render_assuncao_servico():
 
         with st.container(border=True):
             st.markdown("### 📝 Observações Gerais")
-            valores_form_servico["serv_observacoes"] = st.text_area(
+            valor_serv_observacoes_form = st.text_area(
                 "Observações gerais",
                 key="serv_observacoes",
                 disabled=campos_desabilitados,
@@ -2926,13 +2988,6 @@ def render_assuncao_servico():
         # Concluir Serviço fica sempre disponível.
         # Se houver novo/edição em andamento, ele cancela a operação e reexibe o Login.
         concluir_desabilitado = False
-
-        confirmar_salvamento_servico = st.checkbox(
-            "✅ Confirmo que desejo salvar os dados preenchidos acima",
-            key="serv_confirmar_salvar",
-            disabled=salvar_desabilitado,
-            help="Marque esta confirmação antes de clicar em Salvar. Isso evita uma segunda tela de confirmação e preserva os dados recém-editados do formulário.",
-        )
 
         with colb1:
             botao_serv_novo = st.form_submit_button(
@@ -3007,16 +3062,27 @@ def render_assuncao_servico():
         st.rerun()
 
     if botao_serv_salvar:
-        # Correção definitiva do salvamento na edição:
-        # Salvar é executado no MESMO submit do st.form, usando os valores atuais
-        # retornados pelos widgets. Antes, os dados eram enviados para uma confirmação
-        # em outra rerun e, em alguns casos, os valores antigos voltavam a prevalecer,
-        # parecendo que o botão Salvar funcionava como Cancelar.
-        if not confirmar_salvamento_servico:
-            st.warning("⚠️ Marque a confirmação de salvamento antes de clicar em Salvar.")
-            st.stop()
+        valores_form = {
+            "serv_unidade": st.session_state.serv_unidade,
+            "serv_data": valor_serv_data_form,
+            "serv_inicio": valor_serv_inicio_form,
+            "serv_termino": valor_serv_termino_form,
+            "serv_viatura": valor_serv_viatura_form,
+            "serv_km_inicial": valor_serv_km_inicial_form,
+            "serv_km_final": valor_serv_km_final_form,
+            "serv_num_areas": st.session_state.serv_num_areas,
+            "serv_supervisor": valor_serv_supervisor_form,
+            "serv_motorista": valor_serv_motorista_form,
+            "serv_seguranca_1": valor_serv_seguranca_1_form,
+            "serv_seguranca_2": valor_serv_seguranca_2_form,
+            "serv_seguranca_3": valor_serv_seguranca_3_form,
+            "serv_observacoes": valor_serv_observacoes_form,
+        }
 
-        erros, dados = coletar_dados_servico(valores_form_servico)
+        for i in range(1, 6):
+            valores_form[f"serv_area_{i}"] = valores_areas_form.get(i, st.session_state.get(f"serv_area_{i}", ""))
+
+        erros, dados = coletar_dados_servico_de_valores(valores_form)
         if erros:
             for erro in erros:
                 st.warning(f"⚠️ {erro}")
@@ -3054,9 +3120,6 @@ def render_assuncao_servico():
                 st.session_state.tipo_msg_servico = "warning"
                 st.rerun()
 
-            # Mantém o registro atualizado em memória, mas limpa os campos visuais
-            # conforme regra já adotada: os dados só reaparecem ao selecionar Unidade + Data
-            # ou ao clicar em Editar novamente.
             st.session_state.servico_atual = resultado
             st.session_state.assuncao_ativa = True
             desativar_menu_areas()
@@ -3064,9 +3127,6 @@ def render_assuncao_servico():
             st.session_state.msg_servico = "✅ Serviço atualizado com sucesso. A tela foi limpa; selecione Unidade e Data para visualizar novamente."
             st.session_state.tipo_msg_servico = "success"
             st.rerun()
-
-        st.warning("⚠️ Clique em Novo ou Editar antes de salvar.")
-        st.stop()
 
 
 # ==========================================================
