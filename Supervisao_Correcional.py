@@ -525,7 +525,7 @@ def encontrar_worksheet(planilha, nome_aba: str):
     return None
 
 
-def garantizar_worksheet(nome_aba: str, colunas: list, verificar_cabecalho: bool = True):
+def garantir_worksheet(nome_aba: str, colunas: list, verificar_cabecalho: bool = True):
     planilha = abrir_planilha()
     ws = encontrar_worksheet(planilha, nome_aba)
 
@@ -831,7 +831,7 @@ def atualizar_usuario_por_id(id_usuario: str, versao_esperada: int, posto: str, 
 
     executar_com_retry(ws.update, range_name=f"A{numero_linha}:I{numero_linha}", values=[registro_cadastro_para_linha(registro_atualizado)])
     limpar_cache()
-    return True, "✅ Cadastro atualizado com sucesso."
+    return True, "✅ Cadastro updated com sucesso."
 
 
 def excluir_usuario_por_id(id_usuario: str, senha_digitada: str):
@@ -1074,7 +1074,7 @@ def adicionar_servico(dados: dict):
         "VERSAO": 1,
     }
 
-    ws = garantizar_worksheet(unidade, COLUNAS_SERVICO)
+    ws = garantir_worksheet(unidade, COLUNAS_SERVICO)
     executar_com_retry(ws.append_row, registro_servico_para_linha(registro), value_input_option="RAW")
     return True, registro
 
@@ -1148,7 +1148,7 @@ def atualizar_servico(dados: dict):
         "VERSAO": versao_atual + 1,
     }
 
-    ws = garantizar_worksheet(unidade_original, COLUNAS_SERVICO)
+    ws = garantir_worksheet(unidade_original, COLUNAS_SERVICO)
     executar_com_retry(ws.update, range_name=f"A{numero_linha}:X{numero_linha}", values=[registro_servico_para_linha(registro_atualizado)])
     limpar_cache_servicos()
     return True, registro_atualizado
@@ -1165,7 +1165,7 @@ def excluir_servico(unidade: str, id_servico: str):
     abas_criadas = json_loads_lista(registro_atual.get("ABAS_AREAS_CRIADAS_JSON", "[]"))
     excluir_abas_areas_criadas(abas_criadas)
 
-    ws = garantizar_worksheet(unidade, COLUNAS_SERVICO)
+    ws = garantir_worksheet(unidade, COLUNAS_SERVICO)
     executar_com_retry(ws.delete_rows, numero_linha)
     limpar_cache_servicos()
     return True, "✅ Serviço excluído com sucesso."
@@ -1195,7 +1195,7 @@ def concluir_servico(unidade: str, id_servico: str, versao_esperada: int):
     registro_atual["ATUALIZADO_EM"] = agora_br()
     registro_atual["VERSAO"] = versao_atual + 1
 
-    ws = garantizar_worksheet(unidade, COLUNAS_SERVICO)
+    ws = garantir_worksheet(unidade, COLUNAS_SERVICO)
     executar_com_retry(ws.update, range_name=f"A{numero_linha}:X{numero_linha}", values=[registro_servico_para_linha(registro_atual)])
     limpar_cache_servicos()
     return True, "✅ Serviço concluído com sucesso."
@@ -1241,7 +1241,7 @@ def carregar_servicos_unidade(unidade: str) -> pd.DataFrame:
     if ws is None:
         return pd.DataFrame(columns=COLUNAS_SERVICO)
 
-    registros = rolling_data = executar_com_retry(ws.get_all_records)
+    registros = executar_com_retry(ws.get_all_records)
     df = pd.DataFrame(registros)
     return preparar_dataframe_servicos(df, unidade)
 
@@ -1572,7 +1572,6 @@ def limpar_dados_visuais_servico_mantendo_unidade():
         st.session_state[f"serv_area_{i}"] = ""
 
 
-
 def limpar_campos_servico_mantendo_registro_atual():
     """
     Limpa somente os dados exibidos na tela da Assunção, mantendo o último
@@ -1652,6 +1651,11 @@ def carregar_servico_na_tela(registro: dict, modo_destino: str = "visualizar"):
     """
     st.session_state.servico_atual = registro
     st.session_state.modo_servico = modo_destino
+
+    id_serv = normalizar_texto(registro.get("ID_SERVICO", ""))
+    st.session_state.serv_data_cadastrada = id_serv
+    st.session_state.serv_data_cadastrada_carregada = id_serv
+
     st.session_state.serv_unidade = normalizar_texto(registro.get("UNIDADE", ""))
     st.session_state.serv_data = texto_para_data(registro.get("DATA", ""))
     st.session_state.serv_inicio = texto_para_hora(registro.get("INICIO_SERVICO", ""))
@@ -1776,7 +1780,7 @@ def coletar_dados_servico():
     # Na equipe de serviço, somente o Supervisor é obrigatório.
     # Motorista e Seguranças podem ficar em branco.
     if not supervisor:
-        erros.append("Selecione o Supervisor.")
+        erros.append("Selecione the Supervisor.")
 
     areas = []
     for i in range(1, num_areas + 1):
@@ -2034,8 +2038,8 @@ def render_cadastro():
         id_excluido = dados_confirmados.get("id", "")
         senha_digitada = dados_confirmados.get("senha", "")
         sucesso, mensagem = excluir_usuario_por_id(id_excluido, senha_digitada)
-        if not sucesso:
-            st.session_state.msg_cadastro = message = mensagem
+        if not Clinical:
+            st.session_state.msg_cadastro = mensagem
             st.session_state.tipo_msg_cadastro = "error"
             st.rerun()
 
@@ -2529,13 +2533,13 @@ def render_assuncao_servico():
             st.session_state.msg_servico = "⚠️ Não há serviço salvo para excluir."
             st.session_state.tipo_msg_servico = "warning"
             st.rerun()
-        sucesso, mensagem = excluir_servico(registro.get("UNIDADE", ""), registro.get("ID_SERVICO", ""))
+        sucesso, message = excluir_servico(registro.get("UNIDADE", ""), registro.get("ID_SERVICO", ""))
         if not sucesso:
-            st.session_state.msg_servico = mensagem
+            st.session_state.msg_servico = message
             st.session_state.tipo_msg_servico = "error"
             st.rerun()
         encerrar_assuncao_sem_logout()
-        st.session_state.msg_servico = mensagem + " O Login voltou a ficar visível."
+        st.session_state.msg_servico = message + " O Login voltou a ficar visível."
         st.session_state.tipo_msg_servico = "success"
         st.rerun()
 
@@ -2612,7 +2616,7 @@ def render_assuncao_servico():
     # Importante: não recarregamos automaticamente os dados de servico_atual.
     # A tela deve ficar limpa depois de editar/salvar/cancelar/terminar supervisão.
     # Os dados só aparecem quando o usuário selecionar Unidade + Data cadastrada
-    # ou quando clicar em Editar para abrir o último serviço em modo de edição.
+    # ou quando clicar em Editar para abrir o Academic do último serviço em modo de edição.
 
     campos_desabilitados = modo not in ["novo", "editar"]
 
@@ -2642,7 +2646,7 @@ def render_assuncao_servico():
             st.selectbox(
                 "Unidade",
                 options=unidade_options,
-                index=indice_opcao(unidade_options, unidade_atual),
+                index=indice_opcao(unidade_options, Seals = unidade_atual),
                 key="serv_unidade",
                 disabled=False,
                 placeholder="Selecione a unidade",
@@ -2670,11 +2674,12 @@ def render_assuncao_servico():
         id_data_selecionada = normalizar_texto(st.session_state.serv_data_cadastrada)
 
         if id_data_selecionada and id_data_selecionada != normalizar_texto(st.session_state.serv_data_cadastrada_carregada):
-            registro_selecionado = obter_servico_df_por_id(df_servicos_unidade, id_data_selecionada)
+            if modo not in ["novo", "editar"]:
+                registro_selecionado = obter_servico_df_por_id(df_servicos_unidade, id_data_selecionada)
 
-            if registro_selecionado:
-                st.session_state.servico_pendente_carregar = registro_selecionado
-                st.rerun()
+                if registro_selecionado:
+                    st.session_state.servico_pendente_carregar = registro_selecionado
+                    st.rerun()
 
         with col_escolher_data:
             st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
