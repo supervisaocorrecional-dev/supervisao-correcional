@@ -1118,7 +1118,7 @@ def atualizar_servico(dados: dict):
             unidade=unidade,
             data_servico=dados["DATA"],
             nomes_existentes=nomes_existentes,
-        )
+            )
         if criada:
             abas_areas_criadas.append(nome_aba_area)
 
@@ -1577,7 +1577,7 @@ def limpar_dados_visuais_servico_mantendo_unidade():
 def limpar_campos_servico_mantendo_registro_atual():
     """
     Limpa somente os dados exibidos na tela da Assunção, mantendo o último
-    serviço salvo em memória para permitir Editar, Excluir ou Continuar Supervisão.
+    servico salvo em memória para permitir Editar, Excluir ou Continuar Supervisão.
 
     Uso: depois de editar/salvar/cancelar/terminar supervisão, a tela não deve
     continuar mostrando dados antigos. Os dados só voltam a aparecer quando a
@@ -2030,49 +2030,6 @@ def render_cadastro():
         st.session_state.tipo_msg_cadastro = "success"
         st.rerun()
 
-    if acao_confirmada == "cadastro_salvar":
-        modo_atual = dados_confirmados.get("modo", "visualizar")
-        posto_graduacao = normalizar_texto(dados_confirmados.get("posto", ""))
-        rg = normalizar_rg(dados_confirmados.get("rg", ""))
-        nome_escala = normalizar_texto(dados_confirmados.get("nome", ""))
-        senha = normalizar_texto(dados_confirmados.get("senha", ""))
-
-        if modo_atual == "novo":
-            sucesso, resultado = adicionar_usuario(posto=posto_graduacao, rg=rg, nome=nome_escala, senha=senha)
-            if not sucesso:
-                st.session_state.msg_cadastro = resultado
-                st.session_state.tipo_msg_cadastro = "error"
-                st.rerun()
-
-            limpar_cache()
-            df_pos = carregar_cadastros()
-            novo_id = resultado
-            indices = df_pos.index[df_pos["ID"].astype(str).str.strip() == novo_id].tolist()
-            st.session_state.indice_atual = int(indices[0]) if indices else max(0, len(df_pos) - 1)
-            resetar_operacao_cadastro()
-            st.session_state.msg_cadastro = "✅ Cadastro salvo com sucesso. Aguarde autorização do Administrador."
-            st.session_state.tipo_msg_cadastro = "success"
-            st.rerun()
-
-        if modo_atual == "editar":
-            id_edicao = normalizar_texto(dados_confirmados.get("id", ""))
-            versao_edicao = para_int(dados_confirmados.get("versao", 1), 1)
-            sucesso, mensagem = atualizar_usuario_por_id(id_edicao, versao_edicao, posto_graduacao, rg, nome_escala, senha)
-            if not sucesso:
-                st.session_state.msg_cadastro = mensagem
-                st.session_state.tipo_msg_cadastro = "warning"
-                st.rerun()
-
-            limpar_cache()
-            df_pos = carregar_cadastros()
-            indices = df_pos.index[df_pos["ID"].astype(str).str.strip() == id_edicao].tolist()
-            if indices:
-                st.session_state.indice_atual = int(indices[0])
-            resetar_operacao_cadastro()
-            st.session_state.msg_cadastro = mensagem
-            st.session_state.tipo_msg_cadastro = "success"
-            st.rerun()
-
     if acao_confirmada == "cadastro_excluir":
         id_excluido = dados_confirmados.get("id", "")
         senha_digitada = dados_confirmados.get("senha", "")
@@ -2276,12 +2233,42 @@ def render_cadastro():
             st.session_state.tipo_msg_cadastro = "warning"
             st.rerun()
 
-        solicitar_confirmacao(
-            "cadastro_salvar",
-            "Você está prestes a salvar este cadastro.",
-            {"modo": modo_atual, "id": normalizar_texto(st.session_state.id_em_edicao), "versao": para_int(st.session_state.versao_em_edicao, 1), "posto": posto_graduacao, "rg": rg, "nome": nome_escala, "senha": senha},
-        )
-        st.rerun()
+        if modo_atual == "novo":
+            sucesso, resultado = adicionar_usuario(posto=posto_graduacao, rg=rg, nome=nome_escala, senha=senha)
+            if not sucesso:
+                st.session_state.msg_cadastro = resultado
+                st.session_state.tipo_msg_cadastro = "error"
+                st.rerun()
+
+            limpar_cache()
+            df_pos = carregar_cadastros()
+            novo_id = resultado
+            indices = df_pos.index[df_pos["ID"].astype(str).str.strip() == novo_id].tolist()
+            st.session_state.indice_atual = int(indices[0]) if indices else max(0, len(df_pos) - 1)
+            resetar_operacao_cadastro()
+            st.session_state.msg_cadastro = "✅ Cadastro salvo com sucesso. Aguarde autorização do Administrador."
+            st.session_state.tipo_msg_cadastro = "success"
+            st.rerun()
+
+        elif modo_atual == "editar":
+            id_edicao = normalizar_texto(st.session_state.id_em_edicao)
+            versao_edicao = para_int(st.session_state.versao_em_edicao, 1)
+            sucesso, mensagem = atualizar_usuario_por_id(id_edicao, versao_edicao, posto_graduacao, rg, nome_escala, senha)
+            if not sucesso:
+                st.session_state.msg_cadastro = mensagem
+                st.session_state.tipo_msg_cadastro = "warning"
+                st.rerun()
+
+            limpar_cache()
+            df_pos = carregar_cadastros()
+            indices = df_pos.index[df_pos["ID"].astype(str).str.strip() == id_edicao].tolist()
+            if indices:
+                st.session_state.indice_atual = int(indices[0])
+            resetar_operacao_cadastro()
+            st.session_state.msg_cadastro = mensagem
+            st.session_state.tipo_msg_cadastro = "success"
+            st.rerun()
+
 
     if botao_excluir:
         if df.empty:
