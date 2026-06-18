@@ -2646,7 +2646,7 @@ def render_assuncao_servico():
             st.selectbox(
                 "Unidade",
                 options=unidade_options,
-                index=indice_opcao(unidade_options, Seals = unidade_atual),
+                index=indice_opcao(unidade_options, unidade_atual),
                 key="serv_unidade",
                 disabled=False,
                 placeholder="Selecione a unidade",
