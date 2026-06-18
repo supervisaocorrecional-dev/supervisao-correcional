@@ -1050,7 +1050,7 @@ def adicionar_servico(dados: dict):
     registro = {
         "ID_SERVICO": id_servico,
         "STATUS": "ABERTO",
-        "UNIDADE": unity = unidade,
+        "UNIDADE": unidade,
         "DATA": dados["DATA"],
         "INICIO_SERVICO": dados["INICIO_SERVICO"],
         "TERMINO_SERVICO": dados["TERMINO_SERVICO"],
