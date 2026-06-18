@@ -311,7 +311,6 @@ def texto_para_hora(valor: Any):
     return None
 
 
-
 def limpar_nome_aba(nome: str) -> str:
     nome = texto_caixa_alta(nome)
     nome = re.sub(r"[\[\]\:\*\?\/\\]", "-", nome)
@@ -526,7 +525,7 @@ def encontrar_worksheet(planilha, nome_aba: str):
     return None
 
 
-def garantir_worksheet(nome_aba: str, colunas: list, verificar_cabecalho: bool = True):
+def garantizar_worksheet(nome_aba: str, colunas: list, verificar_cabecalho: bool = True):
     planilha = abrir_planilha()
     ws = encontrar_worksheet(planilha, nome_aba)
 
@@ -538,7 +537,7 @@ def garantir_worksheet(nome_aba: str, colunas: list, verificar_cabecalho: bool =
             cols=max(len(colunas), 10),
         )
         intervalo = f"A1:{chr(64 + len(colunas))}1"
-        executar_com_retry(ws.update, intervalo, [colunas])
+        executar_com_retry(ws.update, range_name=intervalo, values=[colunas])
         cache_headers_ok().add(nome_aba)
         return ws
 
@@ -546,7 +545,7 @@ def garantir_worksheet(nome_aba: str, colunas: list, verificar_cabecalho: bool =
         cabecalho = [normalizar_texto(c) for c in executar_com_retry(ws.row_values, 1)]
         if cabecalho[:len(colunas)] != colunas:
             intervalo = f"A1:{chr(64 + len(colunas))}1"
-            executar_com_retry(ws.update, intervalo, [colunas])
+            executar_com_retry(ws.update, range_name=intervalo, values=[colunas])
         cache_headers_ok().add(nome_aba)
 
     return ws
@@ -562,7 +561,7 @@ def migrar_estrutura_cadastro(ws):
     cabecalho_atual = [normalizar_texto(c) for c in executar_com_retry(ws.row_values, 1)]
 
     if not cabecalho_atual:
-        executar_com_retry(ws.update, "A1:I1", [COLUNAS_CADASTRO])
+        executar_com_retry(ws.update, range_name="A1:I1", values=[COLUNAS_CADASTRO])
         st.session_state["_cadastro_migrado"] = True
         cache_headers_ok().add(ABA_CADASTRO)
         return
@@ -575,7 +574,7 @@ def migrar_estrutura_cadastro(ws):
     valores = executar_com_retry(ws.get_all_values)
 
     if not valores:
-        executar_com_retry(ws.update, "A1:I1", [COLUNAS_CADASTRO])
+        executar_com_retry(ws.update, range_name="A1:I1", values=[COLUNAS_CADASTRO])
         st.session_state["_cadastro_migrado"] = True
         cache_headers_ok().add(ABA_CADASTRO)
         return
@@ -632,7 +631,7 @@ def migrar_estrutura_cadastro(ws):
         valores_novos.append([registro[coluna] for coluna in COLUNAS_CADASTRO])
 
     executar_com_retry(ws.clear)
-    executar_com_retry(ws.update, "A1", valores_novos)
+    executar_com_retry(ws.update, range_name="A1", values=valores_novos)
 
     try:
         linhas_necessarias = max(1000, len(valores_novos) + 20)
@@ -655,7 +654,7 @@ def obter_worksheet_cadastro():
             rows=1000,
             cols=len(COLUNAS_CADASTRO),
         )
-        executar_com_retry(ws.update, "A1:I1", [COLUNAS_CADASTRO])
+        executar_com_retry(ws.update, range_name="A1:I1", values=[COLUNAS_CADASTRO])
         st.session_state["_cadastro_migrado"] = True
         cache_headers_ok().add(ABA_CADASTRO)
         return ws
@@ -830,7 +829,7 @@ def atualizar_usuario_por_id(id_usuario: str, versao_esperada: int, posto: str, 
         "VERSAO": versao_atual + 1,
     }
 
-    executar_com_retry(ws.update, f"A{numero_linha}:I{numero_linha}", [registro_cadastro_para_linha(registro_atualizado)])
+    executar_com_retry(ws.update, range_name=f"A{numero_linha}:I{numero_linha}", values=[registro_cadastro_para_linha(registro_atualizado)])
     limpar_cache()
     return True, "✅ Cadastro atualizado com sucesso."
 
@@ -874,7 +873,7 @@ def atualizar_autorizacao_por_id(id_usuario: str, autorizado: bool, versao_esper
         "VERSAO": versao_atual + 1,
     }
 
-    executar_com_retry(ws.update, f"A{numero_linha}:I{numero_linha}", [registro_cadastro_para_linha(registro_atualizado)])
+    executar_com_retry(ws.update, range_name=f"A{numero_linha}:I{numero_linha}", values=[registro_cadastro_para_linha(registro_atualizado)])
     limpar_cache()
     return True, "OK"
 
@@ -980,7 +979,7 @@ def criar_ou_obter_aba_area(nome_area: str, id_servico: str, unidade: str, data_
             rows=1000,
             cols=len(COLUNAS_AREA),
         )
-        executar_com_retry(ws.update, "A1:F1", [COLUNAS_AREA])
+        executar_com_retry(ws.update, range_name="A1:F1", values=[COLUNAS_AREA])
         nomes_existentes.add(nome_final)
         cache_headers_ok().add(nome_final)
         criada = True
@@ -988,7 +987,7 @@ def criar_ou_obter_aba_area(nome_area: str, id_servico: str, unidade: str, data_
     if not criada and nome_final not in cache_headers_ok():
         cabecalho = [normalizar_texto(c) for c in executar_com_retry(ws.row_values, 1)]
         if cabecalho[:len(COLUNAS_AREA)] != COLUNAS_AREA:
-            executar_com_retry(ws.update, "A1:F1", [COLUNAS_AREA])
+            executar_com_retry(ws.update, range_name="A1:F1", values=[COLUNAS_AREA])
         cache_headers_ok().add(nome_final)
 
     linha_area = [
@@ -1051,7 +1050,7 @@ def adicionar_servico(dados: dict):
     registro = {
         "ID_SERVICO": id_servico,
         "STATUS": "ABERTO",
-        "UNIDADE": unidade,
+        "UNIDADE": unity = unidade,
         "DATA": dados["DATA"],
         "INICIO_SERVICO": dados["INICIO_SERVICO"],
         "TERMINO_SERVICO": dados["TERMINO_SERVICO"],
@@ -1075,7 +1074,7 @@ def adicionar_servico(dados: dict):
         "VERSAO": 1,
     }
 
-    ws = garantir_worksheet(unidade, COLUNAS_SERVICO)
+    ws = garantizar_worksheet(unidade, COLUNAS_SERVICO)
     executar_com_retry(ws.append_row, registro_servico_para_linha(registro), value_input_option="RAW")
     return True, registro
 
@@ -1118,7 +1117,7 @@ def atualizar_servico(dados: dict):
             unidade=unidade,
             data_servico=dados["DATA"],
             nomes_existentes=nomes_existentes,
-            )
+        )
         if criada:
             abas_areas_criadas.append(nome_aba_area)
 
@@ -1149,8 +1148,8 @@ def atualizar_servico(dados: dict):
         "VERSAO": versao_atual + 1,
     }
 
-    ws = garantir_worksheet(unidade_original, COLUNAS_SERVICO)
-    executar_com_retry(ws.update, f"A{numero_linha}:X{numero_linha}", [registro_servico_para_linha(registro_atualizado)])
+    ws = garantizar_worksheet(unidade_original, COLUNAS_SERVICO)
+    executar_com_retry(ws.update, range_name=f"A{numero_linha}:X{numero_linha}", values=[registro_servico_para_linha(registro_atualizado)])
     limpar_cache_servicos()
     return True, registro_atualizado
 
@@ -1166,7 +1165,7 @@ def excluir_servico(unidade: str, id_servico: str):
     abas_criadas = json_loads_lista(registro_atual.get("ABAS_AREAS_CRIADAS_JSON", "[]"))
     excluir_abas_areas_criadas(abas_criadas)
 
-    ws = garantir_worksheet(unidade, COLUNAS_SERVICO)
+    ws = garantizar_worksheet(unidade, COLUNAS_SERVICO)
     executar_com_retry(ws.delete_rows, numero_linha)
     limpar_cache_servicos()
     return True, "✅ Serviço excluído com sucesso."
@@ -1196,8 +1195,8 @@ def concluir_servico(unidade: str, id_servico: str, versao_esperada: int):
     registro_atual["ATUALIZADO_EM"] = agora_br()
     registro_atual["VERSAO"] = versao_atual + 1
 
-    ws = garantir_worksheet(unidade, COLUNAS_SERVICO)
-    executar_com_retry(ws.update, f"A{numero_linha}:X{numero_linha}", [registro_servico_para_linha(registro_atual)])
+    ws = garantizar_worksheet(unidade, COLUNAS_SERVICO)
+    executar_com_retry(ws.update, range_name=f"A{numero_linha}:X{numero_linha}", values=[registro_servico_para_linha(registro_atual)])
     limpar_cache_servicos()
     return True, "✅ Serviço concluído com sucesso."
 
@@ -1242,7 +1241,7 @@ def carregar_servicos_unidade(unidade: str) -> pd.DataFrame:
     if ws is None:
         return pd.DataFrame(columns=COLUNAS_SERVICO)
 
-    registros = executar_com_retry(ws.get_all_records)
+    registros = rolling_data = executar_com_retry(ws.get_all_records)
     df = pd.DataFrame(registros)
     return preparar_dataframe_servicos(df, unidade)
 
@@ -1577,7 +1576,7 @@ def limpar_dados_visuais_servico_mantendo_unidade():
 def limpar_campos_servico_mantendo_registro_atual():
     """
     Limpa somente os dados exibidos na tela da Assunção, mantendo o último
-    servico salvo em memória para permitir Editar, Excluir ou Continuar Supervisão.
+    serviço salvo em memória para permitir Editar, Excluir ou Continuar Supervisão.
 
     Uso: depois de editar/salvar/cancelar/terminar supervisão, a tela não deve
     continuar mostrando dados antigos. Os dados só voltam a aparecer quando a
@@ -1607,6 +1606,7 @@ def limpar_campos_servico_mantendo_registro_atual():
 
     for i in range(1, 6):
         st.session_state[f"serv_area_{i}"] = ""
+
 
 def ao_alterar_unidade_servico():
     """
@@ -2035,7 +2035,7 @@ def render_cadastro():
         senha_digitada = dados_confirmados.get("senha", "")
         sucesso, mensagem = excluir_usuario_por_id(id_excluido, senha_digitada)
         if not sucesso:
-            st.session_state.msg_cadastro = mensagem
+            st.session_state.msg_cadastro = message = mensagem
             st.session_state.tipo_msg_cadastro = "error"
             st.rerun()
 
@@ -2268,7 +2268,6 @@ def render_cadastro():
             st.session_state.msg_cadastro = mensagem
             st.session_state.tipo_msg_cadastro = "success"
             st.rerun()
-
 
     if botao_excluir:
         if df.empty:
